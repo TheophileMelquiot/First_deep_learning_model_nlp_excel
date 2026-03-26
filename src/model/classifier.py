@@ -151,24 +151,10 @@ class ColumnClassifier(nn.Module):
         # Feature encoding
         feature_emb = None
         if self.use_features:
-            feat_parts = []
-            if self.use_stats and stat_features is not None:
-                feat_parts.append(stat_features)
-            if self.use_patterns and pattern_features is not None:
-                feat_parts.append(pattern_features)
-
-            if feat_parts:
-                if len(feat_parts) == 1:
-                    combined_features = feat_parts[0]
-                else:
-                    combined_features = torch.cat(feat_parts, dim=1)
-                # Pass dummy zero tensors for missing modalities
-                if self.use_stats and stat_features is not None and self.use_patterns and pattern_features is not None:
-                    feature_emb = self.feature_encoder(stat_features, pattern_features)
-                elif self.use_stats and stat_features is not None:
-                    feature_emb = self.feature_encoder(stat_features, torch.zeros(stat_features.size(0), 0, device=stat_features.device))
-                elif self.use_patterns and pattern_features is not None:
-                    feature_emb = self.feature_encoder(torch.zeros(pattern_features.size(0), 0, device=pattern_features.device), pattern_features)
+            s = stat_features if self.use_stats else None
+            p = pattern_features if self.use_patterns else None
+            if s is not None or p is not None:
+                feature_emb = self.feature_encoder(stat_features=s, pattern_features=p)
 
         # Fusion
         if text_emb is not None and feature_emb is not None:

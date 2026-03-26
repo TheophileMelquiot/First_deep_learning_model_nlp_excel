@@ -47,8 +47,8 @@ class FeatureEncoder(nn.Module):
 
     def forward(
         self,
-        stat_features: torch.Tensor,
-        pattern_features: torch.Tensor,
+        stat_features: torch.Tensor | None = None,
+        pattern_features: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """Forward pass through the feature encoder.
 
@@ -59,5 +59,10 @@ class FeatureEncoder(nn.Module):
         Returns:
             Encoded features, shape (batch_size, hidden_size)
         """
-        combined = torch.cat([stat_features, pattern_features], dim=1)
+        parts = []
+        if stat_features is not None and stat_features.size(1) > 0:
+            parts.append(stat_features)
+        if pattern_features is not None and pattern_features.size(1) > 0:
+            parts.append(pattern_features)
+        combined = torch.cat(parts, dim=1)
         return self.encoder(combined)
