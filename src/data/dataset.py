@@ -24,7 +24,7 @@ class ColumnDataset(Dataset):
     """
 
     STAT_KEYS = ["n_unique", "entropy", "null_ratio", "mean_length"]
-    PATTERN_KEYS = ["is_email", "is_phone", "is_numeric", "is_date", "has_at", "has_dot"]
+    PATTERN_KEYS = ["is_email", "is_phone", "is_numeric", "is_date", "has_at", "has_dot", "is_text", "has_space", "has_digit"]
 
     def __init__(
         self,
