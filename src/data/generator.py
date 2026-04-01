@@ -7,7 +7,7 @@ Each sample contains:
 - header: column header text
 - values: list of sample cell values
 - stats: statistical features (n_unique, entropy, null_ratio, mean_length)
-- patterns: pattern-based features (is_email, is_phone, is_numeric, is_date, has_at, has_dot)
+- patterns: pattern-based features (is_email, is_phone, is_numeric, is_date, has_at, has_dot, is_text, has_space, has_digit)
 - label: integer class label
 """
 
@@ -16,6 +16,7 @@ import random
 import re
 import string
 from typing import Any
+
 
 
 # Template pools for generating realistic column data
@@ -51,6 +52,19 @@ _HEADERS = {
     "categorical": [
         "status", "category", "type", "level", "gender",
         "country", "department", "grade", "classe", "group",
+    ],
+    "account_number": [
+        "compte", "account", "iban", "n° de compte", "numéro de compte",
+        "numéro abrégé du compte", "N° cpte", "account_number", "Compte DO",
+        "cpt_iban", "numéro compte",
+    ],
+    "description": [
+        "motif", "libellé", "description", "commentaires", "information",
+        "intitulé", "libelle", "Motif de paiement", "observations", "note",
+    ],
+    "quantity": [
+        "quantite", "volume", "nombre", "vol", "qty", "count",
+        "nb", "quantity", "nombre d'opérations", "Nombre de mouvements",
     ],
 }
 
@@ -158,6 +172,52 @@ def _generate_address() -> str:
         return f"{num} {street}"
     else:
         return f"{street}, {city}"
+    
+
+
+def _generate_account_number() -> str:
+    formats = [
+        # IBAN-like
+        lambda: f"FR{random.randint(10,99)}{random.randint(10000,99999)}{''.join(random.choices(string.digits, k=20))}",
+        # abbreviated numeric account
+        lambda: str(random.randint(10000000, 999999999)),
+        # alphanumeric account ref
+        lambda: f"{''.join(random.choices(string.ascii_uppercase + string.digits, k=4))}{random.randint(10000, 99999)}",
+        # zero-padded account
+        lambda: f"0000{random.choice(string.ascii_uppercase)}{random.randint(100000, 999999)}",
+    ]
+    return random.choice(formats)()
+
+
+def _generate_description() -> str:
+    prefixes = [
+        "VIREMENT EN FAVEUR DE", "REGLEMENT FACTURE", "SALAIRES ET REMUNERATIONS",
+        "LOYER TRIMESTRE", "PAIEMENT REFERENCE", "REMBOURSEMENT", "HONORAIRES",
+        "ANCIEN ID EVCLI =", "OPERATION INTERBANCAIRE", "MONTANT D ORIGINE",
+        "PRELEVEMENT SEPA", "NOTE DE FRAIS", "COMMISSION SUR", "FRAIS DE DOSSIER",
+        "RAPPORT MENSUEL", "DETAIL OPERATION", "OBSERVATION CLIENT",
+    ]
+    suffixes = [
+        f"{random.randint(1, 9999999)}", f"REF {random.randint(1000, 9999999)}",
+        f"DU {random.randint(1, 28):02d}/0{random.randint(1, 9)}/{random.randint(2020, 2025)}",
+        "", f"- {random.choice(['EUR', 'USD', 'GBP'])} {random.randint(100, 99999)}",
+    ]
+    return f"{random.choice(prefixes)} {random.choice(suffixes)}".strip()
+
+
+def _generate_quantity() -> str:
+    formats = [
+        # plain integer count
+        lambda: str(random.randint(0, 9999999)),
+        # large volume with spaces (French number formatting)
+        lambda: f"{random.randint(1, 999):,}".replace(",", " ") + f" {random.randint(0, 999):03d}",
+        # small count
+        lambda: str(random.randint(0, 999)),
+        # zero (frequent in your data)
+        lambda: "0",
+    ]
+    return random.choice(formats)()
+
 
 
 def _generate_categorical() -> str:
@@ -174,6 +234,9 @@ _GENERATORS = {
     "name": _generate_name,
     "address": _generate_address,
     "categorical": _generate_categorical,
+    "account_number": _generate_account_number,
+    "description":    _generate_description,
+    "quantity":       _generate_quantity,
 }
 
 
@@ -219,13 +282,24 @@ def _compute_patterns(values: list[str]) -> dict[str, float]:
     has_at = sum(1 for v in non_null if "@" in v) / n
     has_dot = sum(1 for v in non_null if "." in v) / n
 
+    # --- new features ---
+    # is_text: purely alphabetic (letters + spaces + hyphens), no digits or special chars
+    is_text    = sum(1 for v in non_null if v.replace(" ", "").replace("-", "").replace(",", "").isalpha()) / n
+    # has_space: value contains at least one space (full names, addresses)
+    has_space  = sum(1 for v in non_null if " " in v) / n
+    # has_digit: value contains at least one digit (ids, prices, phones, dates)
+    has_digit  = sum(1 for v in non_null if any(c.isdigit() for c in v)) / n
+
     return {
         "is_email": is_email,
         "is_phone": is_phone,
         "is_numeric": is_numeric,
         "is_date": is_date,
+        "is_text": is_text,  
         "has_at": has_at,
         "has_dot": has_dot,
+        "has_space":  has_space,  # new
+        "has_digit":  has_digit, 
     }
 
 
