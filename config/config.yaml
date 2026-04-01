@@ -6,7 +6,7 @@ seed: 42
 # Data settings
 data:
   num_samples_per_class: 500
-  num_classes: 8
+  num_classes: 11
   max_values_per_column: 10
   val_ratio: 0.15
   test_ratio: 0.15
@@ -19,6 +19,9 @@ data:
     - name
     - address
     - categorical
+    - account_number     
+    - description         
+    - quantity 
 
 # Model settings
 model:
@@ -27,7 +30,7 @@ model:
   feature_hidden_size: 64
   fusion_hidden_size: 256
   num_stat_features: 4    # n_unique, entropy, null_ratio, mean_length
-  num_pattern_features: 6 # is_email, is_phone, is_numeric, is_date, has_at, has_dot
+  num_pattern_features: 9 # is_email, is_phone, is_numeric, is_date, has_at, has_dot
   dropout: 0.3
   freeze_transformer: false
 
