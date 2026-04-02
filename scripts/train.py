@@ -8,7 +8,7 @@ import argparse
 import random
 import sys
 from pathlib import Path
-
+import json 
 import numpy as np
 import torch
 import yaml
@@ -67,6 +67,63 @@ def split_dataset(
 
     return train_samples, val_samples, test_samples
 
+def print_overfitting_report(results: dict, history: dict) -> None:
+    """Print a structured overfitting diagnostic report."""
+    print("\n" + "=" * 60)
+    print("OVERFITTING / CALIBRATION DIAGNOSTIC REPORT")
+    print("=" * 60)
+
+    # ── Calibration metrics ───────────────────────────────────────
+    print("\n📐 Calibration:")
+    ece = results["ece"]
+    brier = results["brier_score"]
+    test_ll = results["test_log_loss"]
+    print(f"  ECE (Expected Calibration Error) : {ece:.4f}  "
+          f"{'✅ good (<0.05)' if ece < 0.05 else '⚠️  check reliability diagram'}")
+    print(f"  Brier Score                      : {brier:.4f}  "
+          f"{'✅ good (<0.05)' if brier < 0.05 else '⚠️  probabilistic error is high'}")
+    print(f"  Test Log Loss                    : {test_ll:.4f}")
+
+    # ── Uncertainty / entropy ─────────────────────────────────────
+    print("\n🔮 Prediction Uncertainty:")
+    me = results["mean_entropy"]
+    me_norm = results["mean_entropy_normalized"]
+    print(f"  Mean prediction entropy          : {me:.4f}")
+    print(f"  Normalized entropy (0=sure,1=lost): {me_norm:.4f}  "
+          f"{'⚠️  suspiciously low' if me_norm < 0.01 else '✅ ok'}")
+
+    # ── Overfitting gaps ──────────────────────────────────────────
+    gaps = results["overfitting_gaps"]
+    if gaps:
+        print("\n📊 Train / Val / Test Gaps:")
+        if "loss_gap" in gaps:
+            g = gaps["loss_gap"]
+            print(f"  Val Loss - Train Loss            : {g:+.4f}  "
+                  f"{'✅ normal' if g > 0 else '⚠️  val < train (data leak?)'}")
+        if "acc_gap" in gaps:
+            g = gaps["acc_gap"]
+            print(f"  Train Acc - Val Acc              : {g:+.4f}  "
+                  f"{'⚠️  overfitting' if g > 0.05 else '✅ ok'}")
+        if "test_log_loss_vs_val_loss" in gaps:
+            g = gaps["test_log_loss_vs_val_loss"]
+            print(f"  Test LogLoss - Val Loss          : {g:+.4f}  "
+                  f"{'✅ generalizing' if abs(g) < 0.1 else '⚠️  test/val distribution shift'}")
+
+    # ── Per-class confidence ──────────────────────────────────────
+    print("\n🔬 Per-Class Confidence vs F1 (potential over-confidence):")
+    per_class = results["per_class_confidence"]
+    header = f"  {'Class':<18} {'Confidence':>12} {'F1':>8} {'Entropy':>10} {'Status':>10}"
+    print(header)
+    print("  " + "-" * 60)
+    for cls, m in per_class.items():
+        conf = m["mean_confidence"]
+        f1 = m["f1"]
+        ent = m["mean_entropy"]
+        # Flag over-confidence: confidence much higher than F1
+        status = "⚠️  over-conf" if (conf - f1) > 0.05 else "✅"
+        print(f"  {cls:<18} {conf:>12.4f} {f1:>8.4f} {ent:>10.4f} {status:>10}")
+
+    print()
 
 def main():
     parser = argparse.ArgumentParser(description="Train Column Classifier")
@@ -85,13 +142,10 @@ def main():
     print("=" * 60)
 
     # Generate dataset
-    print("\n[1/5] Generating synthetic dataset...")
-    dataset = generate_dataset(
-        num_samples_per_class=config["data"]["num_samples_per_class"],
-        class_labels=config["data"]["class_labels"],
-        num_values=config["data"]["max_values_per_column"],
-        seed=config["seed"],
-    )
+    print("\n[1/5] Loading merged dataset...")
+    with open("data/merged_dataset.json", encoding="utf-8") as f:
+        dataset = json.load(f)
+    random.shuffle(dataset)   # seed already set above → reproducible
     print(f"  Total samples: {len(dataset)}")
 
     # Split dataset
