@@ -82,6 +82,137 @@ def plot_confusion_matrix(
     plt.close()
     print(f"Confusion matrix saved to {save_path}")
 
+def plot_reliability_diagram(
+    results: dict,
+    save_path: str = "outputs/reliability_diagram.png",
+) -> None:
+    """Plot a reliability diagram (calibration plot).
+
+    Shows whether predicted confidence matches actual accuracy.
+    A perfectly calibrated model follows the diagonal y=x.
+    Points ABOVE the diagonal → under-confident.
+    Points BELOW the diagonal → over-confident (common with fine-tuned LLMs).
+
+    Args:
+        results: Output dict from evaluate_model() containing calibration_bins
+        save_path: Path to save the figure
+    """
+    Path(save_path).parent.mkdir(parents=True, exist_ok=True)
+
+    bins = results["calibration_bins"]
+    bin_confs = bins["confidences"]
+    bin_accs = bins["accuracies"]
+    bin_counts = bins["counts"]
+    ece = results["ece"]
+
+    # Only plot non-empty bins
+    mask = bin_counts > 0
+
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
+
+    # Left: Reliability diagram
+    ax1.plot([0, 1], [0, 1], "k--", label="Perfect calibration", linewidth=1.5)
+    ax1.bar(
+        bin_confs[mask], bin_accs[mask],
+        width=1.0 / len(bin_counts), alpha=0.6,
+        color="steelblue", edgecolor="black", label="Model",
+        align="center",
+    )
+    ax1.set_xlabel("Mean Predicted Confidence")
+    ax1.set_ylabel("Fraction of Correct Predictions")
+    ax1.set_title(f"Reliability Diagram\nECE = {ece:.4f}")
+    ax1.legend()
+    ax1.set_xlim(0, 1)
+    ax1.set_ylim(0, 1)
+    ax1.grid(True, alpha=0.3)
+
+    # Right: Confidence histogram (how often each confidence level is used)
+    ax2.bar(
+        bin_confs[mask], bin_counts[mask],
+        width=1.0 / len(bin_counts), alpha=0.7,
+        color="coral", edgecolor="black", align="center",
+    )
+    ax2.set_xlabel("Mean Predicted Confidence")
+    ax2.set_ylabel("Number of Samples")
+    ax2.set_title("Confidence Distribution\n(are predictions clustered near 1.0?)")
+    ax2.grid(True, alpha=0.3)
+
+    plt.tight_layout()
+    plt.savefig(save_path, dpi=150, bbox_inches="tight")
+    plt.close()
+    print(f"Reliability diagram saved to {save_path}")
+
+
+def plot_per_class_confidence(
+    results: dict,
+    save_path: str = "outputs/per_class_confidence.png",
+) -> None:
+    """Plot per-class mean confidence and entropy.
+
+    Detects classes where the model is:
+    - Over-confident (high confidence + possible errors)
+    - Under-confident (low confidence = model unsure)
+    - Confused (high entropy = probability mass spread across classes)
+
+    Args:
+        results: Output dict from evaluate_model()
+        save_path: Path to save the figure
+    """
+    Path(save_path).parent.mkdir(parents=True, exist_ok=True)
+
+    per_class = results["per_class_confidence"]
+    if not per_class:
+        print("No per-class confidence data available.")
+        return
+
+    class_names = list(per_class.keys())
+    confidences = [per_class[c]["mean_confidence"] for c in class_names]
+    entropies = [per_class[c]["mean_entropy"] for c in class_names]
+    f1_scores = [per_class[c]["f1"] for c in class_names]
+
+    x = np.arange(len(class_names))
+    width = 0.28
+
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(14, 9))
+
+    # Top: Confidence vs F1 per class
+    bars1 = ax1.bar(x - width / 2, confidences, width, label="Mean Confidence", color="steelblue", alpha=0.8)
+    bars2 = ax1.bar(x + width / 2, f1_scores, width, label="F1 Score", color="seagreen", alpha=0.8)
+    ax1.axhline(y=1.0, color="black", linestyle="--", linewidth=0.8, alpha=0.5)
+    ax1.set_xticks(x)
+    ax1.set_xticklabels(class_names, rotation=35, ha="right")
+    ax1.set_ylabel("Score")
+    ax1.set_title("Per-Class: Mean Confidence vs F1 Score\n(gap = over-confidence)")
+    ax1.legend()
+    ax1.set_ylim(0, 1.1)
+    ax1.grid(True, alpha=0.3, axis="y")
+
+    # Add value labels
+    for bar in bars1:
+        ax1.text(
+            bar.get_x() + bar.get_width() / 2,
+            bar.get_height() + 0.01,
+            f"{bar.get_height():.2f}",
+            ha="center", va="bottom", fontsize=7,
+        )
+
+    # Bottom: Mean prediction entropy per class
+    ax2.bar(x, entropies, color="coral", alpha=0.8, edgecolor="black")
+    ax2.set_xticks(x)
+    ax2.set_xticklabels(class_names, rotation=35, ha="right")
+    ax2.set_ylabel("Mean Prediction Entropy")
+    ax2.set_title(
+        f"Per-Class: Mean Prediction Entropy\n"
+        f"(Overall: mean={results['mean_entropy']:.3f}, "
+        f"normalized={results['mean_entropy_normalized']:.3f})"
+    )
+    ax2.grid(True, alpha=0.3, axis="y")
+
+    plt.tight_layout()
+    plt.savefig(save_path, dpi=150, bbox_inches="tight")
+    plt.close()
+    print(f"Per-class confidence plot saved to {save_path}")
+
 
 def error_analysis(
     samples: list[dict],
