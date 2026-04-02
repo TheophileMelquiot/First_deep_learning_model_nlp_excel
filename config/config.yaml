@@ -28,6 +28,7 @@ model:
   transformer_name: "distilbert-base-uncased"
   transformer_hidden_size: 768
   feature_hidden_size: 64
+  fusion_type : "gated"
   fusion_hidden_size: 256
   num_stat_features: 4    # n_unique, entropy, null_ratio, mean_length
   num_pattern_features: 9 # is_email, is_phone, is_numeric, is_date, has_at, has_dot
