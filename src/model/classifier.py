@@ -14,8 +14,7 @@ import torch.nn as nn
 
 from src.model.text_encoder import TextEncoder
 from src.model.feature_encoder import FeatureEncoder
-from src.model.fusion import ConcatFusion, AttentionFusion
-
+from src.model.fusion import ConcatFusion, AttentionFusion, GatedFusion
 
 class ColumnClassifier(nn.Module):
     """Multi-modal deep learning model for column type classification.
@@ -97,6 +96,13 @@ class ColumnClassifier(nn.Module):
         if self.use_text and self.use_features:
             if fusion_type == "attention":
                 self.fusion = AttentionFusion(
+                    text_dim=text_dim,
+                    feature_dim=feature_dim,
+                    fusion_dim=fusion_hidden_size,
+                    dropout=dropout,
+                )
+            elif fusion_type == "gated":          # ← add this
+                self.fusion = GatedFusion(
                     text_dim=text_dim,
                     feature_dim=feature_dim,
                     fusion_dim=fusion_hidden_size,
